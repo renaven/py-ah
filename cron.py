@@ -2,10 +2,11 @@ import kronos
 import json
 import requests
 import gzip
+import datetime
 from operator import itemgetter
 from shutil import copyfile
-from operator import itemgetter
 from time import sleep
+import sys
 
 @kronos.register('20 * * * *')
 def get_auc_data_eu():
@@ -13,6 +14,8 @@ def get_auc_data_eu():
     avg_price_eu = {}
     api_calls_count = 0
     servers_updated_count = 0
+    token = requests.get("https://us.battle.net/oauth/token?grant_type=client_credentials&client_id=35f7041d6b8a4aa99f247a7e74d22dd1&client_secret=G6luUBYvDqdMTVMtFQ6zPjdHEbBDKzJV").json()["access_token"]
+    sleep(2)
     
     with open('/home/sweetpea/public_html/item_db_img_v2.json') as realm_file:
         realms = json.load(realm_file)['realms']
@@ -55,7 +58,7 @@ def get_auc_data_eu():
                 del item
 
         
-        r = requests.get("https://eu.api.battle.net/wow/auction/data/"+s+"?locale=en_GB&apikey=by8ve5ez6s5vn3d7mg4ynxdbxbswyrdw", timeout=20)
+        r = requests.get("https://EU.api.blizzard.com/wow/auction/data/"+s+"?locale=en_GB&access_token="+token, timeout=20)
         sleep(2)
         
         try:
@@ -69,17 +72,27 @@ def get_auc_data_eu():
             continue
         
         del r
-        f = open("/home/sweetpea/webapps/cron_debug_log.txt", "a")
+        #f = open("/home/sweetpea/webapps/cron_debug_log.txt", "a")
         #f.write('API error')
-        f.write(auction_dump_url)
-        f.write('\n')
-        f.close()
+        #f.write(auction_dump_url)
+        #f.write('\n')
+        #f.close()
         
         sleep(2)
         a = requests.get(auction_dump_url)
         api_calls_count += 1
+        
 
-        auc_data = a.json()["auctions"]
+        try:
+            auc_data = a.json()["auctions"]
+        except:
+            f = open("/home/sweetpea/webapps/cron_debug_log.txt", "a")
+            f.write('API error EU '+s)
+            f.write('\n')
+            f.close()
+            continue
+        
+        
         conn_data = a.json()["realms"]
         del a
         connected_realms = []
@@ -141,6 +154,10 @@ def get_auc_data_eu():
         del items
         servers_updated_count += 1
 
+    f = open("/home/sweetpea/webapps/cron_debug_log.txt", "a")
+    f.write("EU Server update finished, writing avg price data...")
+    f.write('\n')
+    f.close()
 
     b = open("/home/sweetpea/webapps/server_data/avg_price_en_GB.json", "w")
     b.write(json.dumps(avg_price_eu))
@@ -148,9 +165,12 @@ def get_auc_data_eu():
     del avg_price_eu
     
     f = open("/home/sweetpea/webapps/cron_debug_log.txt", "a")
-    f.write("Servers updated: "+str(servers_updated_count))
+    f.write(str(datetime.datetime.now()))
+    f.write('\n')
+    f.write("EU Servers updated: "+str(servers_updated_count))
     f.write('\n')
     f.write("API calls: "+str(api_calls_count))
+    f.write('\n')
     f.close()
 
 
@@ -160,6 +180,8 @@ def get_auc_data_us():
     avg_price_us = {}
     api_calls_count = 0
     servers_updated_count = 0
+    token = requests.get("https://us.battle.net/oauth/token?grant_type=client_credentials&client_id=35f7041d6b8a4aa99f247a7e74d22dd1&client_secret=G6luUBYvDqdMTVMtFQ6zPjdHEbBDKzJV").json()["access_token"]
+    #sleep(1)
     
     with open('/home/sweetpea/public_html/item_db_img_v2.json') as realm_file:
         realms = json.load(realm_file)['realms']
@@ -204,31 +226,55 @@ def get_auc_data_us():
                 del item
 
         
-        r = requests.get("https://us.api.battle.net/wow/auction/data/"+s+"?locale=en_US&apikey=by8ve5ez6s5vn3d7mg4ynxdbxbswyrdw", timeout=20)
-        #time.sleep(3)
+        r = requests.get("https://us.api.blizzard.com/wow/auction/data/"+s+"?locale=en_US&access_token="+token, timeout=20)
+        sleep(1)
         
         try:
             auction_dump_url = json.loads(r.text)["files"][0]["url"]
         except (ValueError, KeyError):
             f = open("/home/sweetpea/webapps/cron_debug_log.txt", "a")
-            f.write('API error')
+            f.write('API error loading auction dump url ')
             f.write(r.text)
             f.write('\n')
             f.close()
             continue
         
         del r
-        f = open("/home/sweetpea/webapps/cron_debug_log.txt", "a")
-        #f.write('API error')
-        f.write(auction_dump_url)
-        f.write('\n')
-        f.close()
         
-        #time.sleep(5)
-        a = requests.get(auction_dump_url, timeout=30)
-        api_calls_count += 1
+        
+        attempts = 1
+        success = False
+        my_headers = {'accept-encoding':'gzip'}
+        while attempts < 4 and not success:
+            try:
+                a = requests.get(auction_dump_url, headers=my_headers, timeout=40)
+                success = True
+            except:
+                attempts += 1
+                sleep(1)
+        
+        if not success:
+            f = open("/home/sweetpea/webapps/cron_debug_log.txt", "a")
+            f.write('ERROR '+s+' Auction fetch URL:  ')
+            f.write(auction_dump_url)
+            f.write('\n')
+            # f.write(str(sys.exc_info()[0]))
+            # f.write('\n')
+            # f.write(str(sys.exc_info()[1]))
+            # f.write('\n')
+            f.close()
+            continue
 
-        auc_data = a.json()["auctions"]
+        api_calls_count += 1
+        try:
+            auc_data = a.json()["auctions"]
+        except:
+            f = open("/home/sweetpea/webapps/cron_debug_log.txt", "a")
+            f.write('API error US '+s)
+            f.write('\n')
+            f.close()
+            continue
+        
         conn_data = a.json()["realms"]
         del a
         connected_realms = []
@@ -291,7 +337,7 @@ def get_auc_data_us():
         servers_updated_count += 1
 
     f = open("/home/sweetpea/webapps/cron_debug_log.txt", "a")
-    f.write("Server update finished, writing avg price data...")
+    f.write("US Server update finished, writing avg price data...")
     f.write('\n')
     f.close()
     
@@ -301,9 +347,12 @@ def get_auc_data_us():
     del avg_price_us
     
     f = open("/home/sweetpea/webapps/cron_debug_log.txt", "a")
-    f.write("Servers updated: "+str(servers_updated_count))
+    f.write(str(datetime.datetime.now()))
+    f.write('\n')
+    f.write("US Servers updated: "+str(servers_updated_count))
     f.write('\n')
     f.write("API calls: "+str(api_calls_count))
+    f.write('\n')
     f.close()
 
 
@@ -311,8 +360,11 @@ def get_auc_data_us():
 def update_data():
     id_array = []
     servers = [["tichondrius", "en_US"], ["dalaran", "en_US"], ["stormrage", "en_US"], ["illidan", "en_US"], ["sargeras", "en_US"], ["area-52", "en_US"], ["frostmourne", "en_US"], ["darkspear", "en_US"], ["emerald-dream", "en_US"], ["moon-guard", "en_US"], ["proudmoore", "en_US"], ["outland", "en_GB"], ["sargeras", "en_GB"], ["silvermoon", "en_GB"], ["draenor", "en_GB"], ["stormscale", "en_GB"], ["gordunni", "en_GB"], ["kazzak", "en_GB"], ["ravencrest", "en_GB"], ["twisting-nether", "en_GB"], ["sylvanas", "en_GB"], ["soulflayer", "en_GB"]]
-    #servers = [['sargeras', 'en_US']]
+    #servers = [["outland", "en_GB"], ["sargeras", "en_GB"], ["silvermoon", "en_GB"], ["draenor", "en_GB"], ["stormscale", "en_GB"], ["gordunni", "en_GB"], ["kazzak", "en_GB"], ["ravencrest", "en_GB"], ["twisting-nether", "en_GB"], ["sylvanas", "en_GB"], ["soulflayer", "en_GB"]]
     invalid_ids = ["5108", "15726","5140","9186","5487","823","11206"]
+    token = requests.get("https://us.battle.net/oauth/token?grant_type=client_credentials&client_id=35f7041d6b8a4aa99f247a7e74d22dd1&client_secret=G6luUBYvDqdMTVMtFQ6zPjdHEbBDKzJV").json()["access_token"]
+    sleep(2)
+    
     
     with open('/home/sweetpea/webapps/item_db_img.json') as data_file:    
         for line in data_file:
@@ -320,14 +372,35 @@ def update_data():
             id_array.append(data[0])
             
     for s in servers:
+       
         
-        if s[1] == "en_GB":
-            r = requests.get("https://eu.api.battle.net/wow/auction/data/"+s[0]+"?locale="+s[1]+"&apikey=by8ve5ez6s5vn3d7mg4ynxdbxbswyrdw")
-        elif s[1] == "en_US":
-            r = requests.get("https://us.api.battle.net/wow/auction/data/"+s[0]+"?locale="+s[1]+"&apikey=by8ve5ez6s5vn3d7mg4ynxdbxbswyrdw")
-        auction_dump_url = json.loads(r.text)["files"][0]["url"]
-        a = requests.get(auction_dump_url)
+        try:
+            if s[1] == "en_GB":
+                r = requests.get("https://EU.api.blizzard.com/wow/auction/data/"+s[0]+"?locale="+s[1]+"&access_token="+token, timeout=20)
+            elif s[1] == "en_US":
+                r = requests.get("https://us.api.blizzard.com/wow/auction/data/"+s[0]+"?locale="+s[1]+"&access_token="+token, timeout=20)
+            auction_dump_url = json.loads(r.text)["files"][0]["url"]
+            sleep(1)
+        except:
+            f = open("/home/sweetpea/webapps/cron_debug_log.txt", "a")
+            f.write('DATA UPDATE ERROR '+s[0]+' Auction fetch URL:  ')
+            f.write('\n')
+            f.close()
+            continue
+        
+        try:
+            a = requests.get(auction_dump_url)
+        except:
+            f = open("/home/sweetpea/webapps/cron_debug_log.txt", "a")
+            f.write('DATA UPDATE ERROR '+s[0]+' Auction fetch URL:  ')
+            f.write(auction_dump_url)
+            f.write('\n')
+            f.close()
+            #sleep(2)
+            continue
+        
         auc_data = a.json() 
+        sleep(1)
         
         for i in auc_data["auctions"]:       
             if i['item'] == 82800 and int('82800' + str(i['petSpeciesId'])) not in id_array:
@@ -336,9 +409,10 @@ def update_data():
                 item_pair = []
                 item_id = '82800' + str(i['petSpeciesId'])
                 item_pair.append(int('82800' + str(i['petSpeciesId'])))
-                url_parts = ("https://us.api.battle.net/wow/pet/species/", str(i['petSpeciesId']),  "?locale=en_US&apikey=by8ve5ez6s5vn3d7mg4ynxdbxbswyrdw")
+                url_parts = ("https://us.api.blizzard.com/wow/pet/species/", str(i['petSpeciesId']),  "?locale=en_US&access_token="+token)
                 PET_API_URL = "".join(url_parts)
                 pet_r = requests.get(PET_API_URL)
+                sleep(3)
                 try:
                     pet_data = pet_r.json()
                     item_name = pet_data['name']
@@ -362,9 +436,10 @@ def update_data():
                 if item_id in invalid_ids:
                     continue
                 item_pair.append(i["item"])
-                url_parts = ("https://us.api.battle.net/wow/item/", item_id,  "?locale=en_US&apikey=by8ve5ez6s5vn3d7mg4ynxdbxbswyrdw")
+                url_parts = ("https://us.api.blizzard.com/wow/item/", item_id,  "?locale=en_US&access_token="+token)
                 ITEM_API_URL = "".join(url_parts)
                 item_r = requests.get(ITEM_API_URL)
+                sleep(3)
                 try:
                     item_data = item_r.json()
                     item_name = item_data["name"]
