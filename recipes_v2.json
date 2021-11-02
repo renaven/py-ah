@@ -1,32 +1,4 @@
 {
-  "153476": {
-    "rank3": "TRUE", 
-    "alchemy": "FALSE", 
-    "name": "Enchant Weapon - Coastal Surge", 
-    "components": [
-      {
-        "amount": "15.0", 
-        "img_url": "inv_enchanting_80_shadowdust", 
-        "price": 0, 
-        "name": "Gloom Dust", 
-        "id": "152875"
-      }, 
-      {
-        "amount": "4.0", 
-        "img_url": "inv_enchanting_80_umbrashard", 
-        "price": 0, 
-        "name": "Umbra Shard", 
-        "id": "152876"
-      }, 
-      {
-        "amount": "1.0", 
-        "img_url": "inv_enchanting_80_veiledcrystal", 
-        "price": 0, 
-        "name": "Veiled Crystal", 
-        "id": "152877"
-      }
-    ]
-  }, 
   "153478": {
     "rank3": "TRUE", 
     "alchemy": "FALSE", 
